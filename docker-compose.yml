@@ -1,0 +1,32 @@
+services:
+  # Наш бэкенд на FastAPI
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy  # Заставит backend ждать полной готовности СУБД
+
+
+  # База данных PostgreSQL
+  db:
+    image: postgres:15-alpine
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "5432:5432"
+    command: postgres -c max_connections=100 -c shared_buffers=256MB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

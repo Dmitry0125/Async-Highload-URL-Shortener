@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 from schemas import Elem, URLShortenRequest
 from models import Base, Links
-from database import engine, async_session_local
+from database import engine, get_db
 
 load_dotenv()
 
@@ -21,14 +21,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan) # просто объект (приложение) на основе класса FastAPI
 
-# Base.metadata.create_all(bind=engine) # Создание БД
-
-async def get_db(): # подключение к БД
-    async with async_session_local() as db:
-        try:
-            yield db
-        finally:
-            await db.close()
 
 SECRET_SALT = os.environ.get("HASHIDS_SALT", "fallback-salt")
 hashids = Hashids(salt=SECRET_SALT, min_length=6)

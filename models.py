@@ -1,6 +1,9 @@
 from sqlalchemy import Column, Integer, String, ForeignKey
-# from sqlalchemy.orm import relationship
-from database import Base
+from sqlalchemy.orm import DeclarativeBase
+
+class Base(DeclarativeBase):
+    """Базовый декларативный класс для асинхронной SQLAlchemy 2.0"""
+    pass
 
 class Links(Base):
     __tablename__ = "links"

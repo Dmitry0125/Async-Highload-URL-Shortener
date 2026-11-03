@@ -2,3 +2,6 @@ __pycache__/
 *.db
 .env
 .venv
+postgres_data
+
+tasks.txt
