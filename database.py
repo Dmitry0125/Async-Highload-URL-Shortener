@@ -1,11 +1,16 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-SQL_DB_URL = 'sqlite:///./shortlink.db'
+ASYNC_SQL_DB_URL = 'sqlite+aiosqlite:///./shortlink.db'
 
-engine = create_engine(SQL_DB_URL, connect_args={"check_same_thread": False})
+engine = create_async_engine(ASYNC_SQL_DB_URL, connect_args={"check_same_thread": False})
 
-session_local = sessionmaker(autoflush=False, autocommit=False, bind=engine)
+async_session_local = sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autoflush=False,
+    autocommit=False
+)
 
 Base = declarative_base()

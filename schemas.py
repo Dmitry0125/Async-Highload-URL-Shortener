@@ -1,13 +1,10 @@
 from pydantic import BaseModel, HttpUrl
 
-# class ElemBase(BaseModel):
-#     body: str
-#     short_url: str
-
 class Elem(BaseModel):
     id: int
     body: str
     short_url: str
+    clicks: int
 
     class Config:
         from_attributes = True

@@ -6,6 +6,6 @@ class Links(Base):
     __tablename__ = "links"
 
     id = Column(Integer, primary_key=True)
-    body = Column(String)
-    short_url = Column(String)
+    body = Column(String, nullable=False)
+    clicks = Column(Integer, default=0, nullable=False)
 
