@@ -8,11 +8,23 @@ from hashids import Hashids
 from dotenv import load_dotenv
 import asyncio
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 from schemas import Elem, URLShortenRequest
 from models import Base, Links
 from database import engine, get_db, redis_client, async_session_local
 
 load_dotenv()
+
+REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
+REDIS_PORT = os.environ.get("REDIS_PORT", "6379")
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    storage_uri=f"redis://{REDIS_HOST}:{REDIS_PORT}"
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -24,17 +36,23 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan) # просто объект (приложение) на основе класса FastAPI
 
+# Привязываем Limiter к приложению FastAPI
+app.state.limiter = limiter
+# Добавляем обработчик ошибок: если лимит превышен, FastAPI автоматически вернет статус 429
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 SECRET_SALT = os.environ.get("HASHIDS_SALT", "fallback-salt")
 hashids = Hashids(salt=SECRET_SALT, min_length=6)
 
 @app.post("/shorten", response_model=Elem) # без response_model будет ошибка. То есть мы всегда должны указывать модель, с которой будем работать
-async def add(request: URLShortenRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def add(request: URLShortenRequest, payload: URLShortenRequest, db: AsyncSession = Depends(get_db)):
     """
     Короткую ссылку формируем на лету, отдавая её только пользователю. В самой БД она не хранится, 
     а при получении короткой ссылки в методе @app.get("/{short_hash}") на лету расшифровываем id, ищем в БД и отдаём результат
     """
-    url_to_save = str(request.long_url)
+    url_to_save = str(payload.long_url)
 
     db_link = Links(body=url_to_save)
     db.add(db_link) #.model_dump()
