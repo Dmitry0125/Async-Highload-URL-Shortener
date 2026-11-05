@@ -6,10 +6,11 @@ from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from hashids import Hashids
 from dotenv import load_dotenv
+import asyncio
 
 from schemas import Elem, URLShortenRequest
 from models import Base, Links
-from database import engine, get_db
+from database import engine, get_db, redis_client, async_session_local
 
 load_dotenv()
 
@@ -17,7 +18,9 @@ load_dotenv()
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    bg_task = asyncio.create_task(flush_clicks_to_db())
     yield
+    bg_task.cancel()
 
 app = FastAPI(lifespan=lifespan) # просто объект (приложение) на основе класса FastAPI
 
@@ -40,6 +43,8 @@ async def add(request: URLShortenRequest, db: AsyncSession = Depends(get_db)):
     
     short_hash = hashids.encode(db_link.id)
 
+    await redis_client.set(f"url:{short_hash}", url_to_save, ex=3600)
+
     return Elem(
         id=db_link.id,
         body=db_link.body,
@@ -57,27 +62,59 @@ async def get_all_links(db: AsyncSession = Depends(get_db)):
     if len(all_results)==0:
         return "База данных пока пустая"
     return all_results
-    
+
+async def flush_clicks_to_db():
+    """ Фоновая задача, которая раз в 10 секунд сбрасывает клики из Redis в Postgres """
+    while True:
+        await asyncio.sleep(10)
+        
+        click_keys = await redis_client.keys("clicks:*")
+        if not click_keys:
+            continue
+
+        async with async_session_local() as db:
+            try:
+                for key in click_keys:
+                    short_hash = key.split(":")[1]
+                    
+                    clicks_count = int(await redis_client.getset(key, 0))
+                    
+                    if clicks_count == 0:
+                        continue
+                        
+                    decoded = hashids.decode(short_hash)
+                    if decoded:
+                        db_id = decoded[0]
+                        result = await db.execute(select(Links).where(Links.id == db_id))
+                        db_link = result.scalars().first()
+                        if db_link:
+                            db_link.clicks += clicks_count
+                
+                await db.commit()
+                
+            except Exception as e:
+                print(f"Ошибка при синхронизации кликов с БД: {e}")    
 
 @app.get("/{short_hash}")
 async def redirect_to_long_url(short_hash: str, db: AsyncSession = Depends(get_db)):
+    cached_url = await redis_client.get(f"url:{short_hash}")
+    if cached_url:
+        await redis_client.incr(f"clicks:{short_hash}")
+        return RedirectResponse(url=cached_url, status_code=307)
 
     decoded = hashids.decode(short_hash)
     if not decoded:
         raise HTTPException(status_code=404, detail="Неверный формат короткой ссылки")
     
     db_id = decoded[0]
-    
     result = await db.execute(select(Links).where(Links.id == db_id))
     db_link = result.scalars().first()
     
     if db_link is None:
         raise HTTPException(status_code=404, detail="Ссылка не найдена")
 
-    db_link.clicks +=1
-
-    await db.commit()
-    
+    await redis_client.set(f"url:{short_hash}", db_link.body, ex=3600) # ссылка будет хранится в кэше 1 час
+    await redis_client.incr(f"clicks:{short_hash}")
     return RedirectResponse(url=db_link.body, status_code=307)
 
 @app.get("/stat/{short_hash}")
@@ -95,9 +132,13 @@ async def stat_clicks(short_hash: str, db: AsyncSession = Depends(get_db)):
     if db_link is None:
             raise HTTPException(status_code=404, detail="Ссылка не найдена")
 
+    db_clicks = db_link.clicks
+    redis_clicks = await redis_client.get(f"clicks:{short_hash}")
+    actual_clicks = db_clicks + (int(redis_clicks) if redis_clicks else 0)
+
     return {
         "short_hash": short_hash,
         "original_url": db_link.body,
-        "clicks": db_link.clicks  # Обращаемся напрямую к свойству объекта!
+        "clicks": actual_clicks
     }
 

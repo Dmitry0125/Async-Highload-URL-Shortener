@@ -1,5 +1,5 @@
 services:
-  # Наш бэкенд на FastAPI
+  # Бэкенд на FastAPI
   backend:
     build: .
     ports:
@@ -12,6 +12,8 @@ services:
     depends_on:
       db:
         condition: service_healthy  # Заставит backend ждать полной готовности СУБД
+      redis:
+        condition: service_started
 
 
   # База данных PostgreSQL
@@ -30,3 +32,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    
+  # Кэш-сервер Redis
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
