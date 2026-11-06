@@ -1,5 +1,10 @@
-# Базовый образ с установленным Python 3.11
-FROM python:3.11-slim
+# Базовый образ с установленным Python 3.13
+FROM python:3.13-slim
+
+# Отключаем буферизацию логов Python (чтобы они сразу выводились в консоль Docker) 
+# и запрещаем pip создавать кэш-файлы .pyc
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
 # Устанавливаем рабочую директорию внутри контейнера
 WORKDIR /app

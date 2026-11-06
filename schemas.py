@@ -1,4 +1,4 @@
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, ConfigDict
 
 class Elem(BaseModel):
     id: int
@@ -6,8 +6,7 @@ class Elem(BaseModel):
     short_url: str
     clicks: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class URLShortenRequest(BaseModel):
     # Pydantic автоматически проверит, что строка начинается с http/https 

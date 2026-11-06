@@ -15,7 +15,6 @@ services:
       redis:
         condition: service_started
 
-
   # База данных PostgreSQL
   db:
     image: postgres:15-alpine
@@ -26,6 +25,7 @@ services:
       - .env
     ports:
       - "5432:5432"
+    # Оптимизация параметров памяти и подключений для PostgreSQL
     command: postgres -c max_connections=100 -c shared_buffers=256MB
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]

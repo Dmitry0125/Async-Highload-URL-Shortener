@@ -1,6 +1,6 @@
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,7 +47,7 @@ hashids = Hashids(salt=SECRET_SALT, min_length=6)
 
 @app.post("/shorten", response_model=Elem) # без response_model будет ошибка. То есть мы всегда должны указывать модель, с которой будем работать
 @limiter.limit("5/minute")
-async def add(request: URLShortenRequest, payload: URLShortenRequest, db: AsyncSession = Depends(get_db)):
+async def add(request: Request, payload: URLShortenRequest, db: AsyncSession = Depends(get_db)):
     """
     Короткую ссылку формируем на лету, отдавая её только пользователю. В самой БД она не хранится, 
     а при получении короткой ссылки в методе @app.get("/{short_hash}") на лету расшифровываем id, ищем в БД и отдаём результат
