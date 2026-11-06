@@ -9,6 +9,6 @@ class Links(Base):
     __tablename__ = "links"
 
     id = Column(Integer, primary_key=True)
-    body = Column(String, nullable=False)
+    body = Column(String, nullable=False, index=True)
     clicks = Column(Integer, default=0, nullable=False)
 

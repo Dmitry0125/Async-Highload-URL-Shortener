@@ -1,4 +1,3 @@
-# conftest.py
 import os
 import pytest
 import redis.asyncio as aioredis
@@ -7,7 +6,7 @@ from httpx import AsyncClient, ASGITransport
 
 from models import Base
 from database import get_db
-import database  # Импортируем сам модуль database, чтобы подменить в нем глобальный redis_client
+import database
 from main import app
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -34,21 +33,16 @@ async def db_session():
 async def client(db_session):
     """Асинхронный HTTP-клиент, который полностью изолирует и БД, и Redis под текущий тест"""
     
-    # 1. Создаем тестовый клиент Redis СТРОГО внутри текущего цикла событий этого теста
     redis_host = os.getenv("REDIS_HOST", "localhost")
     redis_port = os.getenv("REDIS_PORT", "6379")
     test_redis = aioredis.from_url(f"redis://{redis_host}:{redis_port}", decode_responses=True)
     
-    # Очищаем Redis перед тестом
     await test_redis.flushdb()
     
-    # 2. ПОДМЕНЯЕМ глобальный клиент Redis в модуле database на наш тестовый клиент!
-    # Благодаря этому эндпоинты в main.py (которые импортируют redis_client из database)
-    # будут использовать именно этот test_redis, привязанный к ПРАВИЛЬНОМУ циклу событий.
     old_redis = database.redis_client
     database.redis_client = test_redis
 
-    # 3. Подменяем базу данных
+    # Подменяем базу данных
     async def _get_test_db():
         yield db_session
     app.dependency_overrides[get_db] = _get_test_db
@@ -57,7 +51,7 @@ async def client(db_session):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
         
-    # 4. После окончания теста возвращаем всё назад и закрываем соединения
+    # После окончания теста возвращаем всё назад и закрываем соединения
     app.dependency_overrides.clear()
     await test_redis.aclose()
     database.redis_client = old_redis

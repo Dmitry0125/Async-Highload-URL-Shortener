@@ -1,4 +1,3 @@
-# test_main.py
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.future import select

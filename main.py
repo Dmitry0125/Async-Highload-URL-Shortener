@@ -2,6 +2,7 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.responses import RedirectResponse
+from sqlalchemy import exists
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from hashids import Hashids
@@ -53,6 +54,25 @@ async def add(request: Request, payload: URLShortenRequest, db: AsyncSession = D
     а при получении короткой ссылки в методе @app.get("/{short_hash}") на лету расшифровываем id, ищем в БД и отдаём результат
     """
     url_to_save = str(payload.long_url)
+
+    link_exists_query = select(exists().where(Links.body == url_to_save))
+    result = await db.execute(link_exists_query)
+    is_duplicate = result.scalar()
+
+    if is_duplicate:
+        existing_result = await db.execute(select(Links).where(Links.body == url_to_save))
+        db_link = existing_result.scalars().first()
+        
+        short_hash = hashids.encode(db_link.id)
+        
+        await redis_client.set(f"url:{short_hash}", url_to_save, ex=3600)
+        
+        return Elem(
+            id=db_link.id,
+            body=db_link.body,
+            short_url=f"http://127.0.0.1/{short_hash}",
+            clicks=db_link.clicks
+        )
 
     db_link = Links(body=url_to_save)
     db.add(db_link) #.model_dump()
